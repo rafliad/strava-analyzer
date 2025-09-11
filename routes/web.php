@@ -25,10 +25,15 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 
-Route::get('/auth/strava/redirect', [StravaController::class, 'redirect'])->middleware('auth')->name('strava.redirect');
-Route::get('/auth/strava/callback', [StravaController::class, 'callback'])->middleware('auth')->name('strava.callback');
-Route::get('/strava/athlete', [StravaController::class, 'athlete']);
-Route::get('/strava/activities', [StravaController::class, 'activities']);
-Route::get('/strava/activity/{id}', [StravaController::class, 'singleActivity']);
+Route::middleware('auth')->prefix('strava')->group(function () {
+    Route::get('/connect', [StravaController::class, 'redirect']);
+    Route::get('/callback', [StravaController::class, 'callback']);
+    Route::post('/disconnect', [StravaController::class, 'disconnect']);
+    Route::get('/athlete', [StravaController::class, 'athlete']);
+    Route::get('/activities', [StravaController::class, 'activities']);
+    Route::get('/activity/{id}', [StravaController::class, 'singleActivity']);
+});
+
+
 
 require __DIR__ . '/auth.php';

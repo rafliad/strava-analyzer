@@ -21,6 +21,10 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'strava_id',
+        'strava_token',
+        'strava_refresh_token',
+        'strava_expires_at',
     ];
 
     /**

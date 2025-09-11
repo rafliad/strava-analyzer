@@ -20,7 +20,7 @@ export default function Dashboard() {
                         </div>
                         <div className="p-6 border-t border-gray-200">
                             <a
-                                href="/auth/strava/redirect"
+                                href="/strava/connect"
                                 className="inline-block px-4 py-2 bg-orange-500 text-white font-semibold rounded-lg shadow-md hover:bg-orange-700"
                             >
                                 Connect with Strava

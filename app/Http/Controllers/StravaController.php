@@ -2,68 +2,106 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Support\Facades\Auth;
-use CodeToad\Strava\StravaFacade as Strava;
 use Illuminate\Http\Request;
-use Exception;
+use CodeToad\Strava\StravaFacade as Strava;
+use Carbon\Carbon;
+use App\Models\User;
+use Illuminate\Support\Facades\Auth;
 
 class StravaController extends Controller
 {
+    // Step 1: redirect user ke Strava
     public function redirect()
     {
-        return redirect(Strava::getAuthorizationUrl());
+        return Strava::authenticate('read_all,profile:read_all,activity:read_all');
     }
 
+    // Step 2: handle callback dari Strava
     public function callback(Request $request)
     {
-        if ($request->has('error')) {
-            return redirect('/dashboard')->with('error', 'Failed to connect to Strava. Authorization was denied.');
-        }
+        $token = Strava::token($request->code);
 
-        try {
-            $code = $request->query('code');
+        $user = Auth::user();
+        /** @var \App\Models\User $user **/
+        $user->update([
+            'strava_id'            => $token->athlete->id,
+            'strava_token'         => $token->access_token,
+            'strava_refresh_token' => $token->refresh_token,
+            'strava_expires_at'    => Carbon::createFromTimestamp($token->expires_at),
+        ]);
 
-            $tokenData = Strava::getAccessToken($code);
-
-            $user = Auth::user();
-
-            /** @var \App\Models\User $user **/
-            $user->update([
-                'strava_id' => $tokenData->athlete->id,
-                'strava_token' => $tokenData->access_token,
-                'strava_refresh_token' => $tokenData->refresh_token,
-                'strava_expires_at' => now()->addSeconds($tokenData->expires_in),
-            ]);
-
-            return redirect('/dashboard')->with('status', 'Successfully connected to Strava!');
-        } catch (Exception $e) {
-            return redirect('/dashboard')->with('error', 'An error occurred while connecting to Strava. Please try again.');
-        }
+        return redirect()->route('dashboard')->with('success', 'Strava connected!');
     }
 
     public function athlete()
     {
-        $token = env('STRAVA_ACCESS_TOKEN');
+        $user = Auth::user();
+        /** @var \App\Models\User $user **/
+        if (now()->timestamp >= $user->strava_expires_at->timestamp) {
+            $refresh = Strava::refreshToken($user->strava_refresh_token);
+            $user->update([
+                'strava_token'         => $refresh->access_token,
+                'strava_refresh_token' => $refresh->refresh_token,
+                'strava_expires_at'    => Carbon::createFromTimestamp($refresh->expires_at),
+            ]);
+        }
 
-        $athlete = Strava::athlete($token);
+        $athlete = Strava::athlete($user->strava_token);
 
         return response()->json($athlete);
     }
 
     public function activities()
     {
-        $token = env('STRAVA_ACCESS_TOKEN');
-        $activities = Strava::activities($token, 1, 5);
+        $user = Auth::user();
+
+        if (now()->timestamp >= $user->strava_expires_at->timestamp) {
+            $refresh = Strava::refreshToken($user->strava_refresh_token);
+            /** @var \App\Models\User $user **/
+            $user->update([
+                'strava_token'         => $refresh->access_token,
+                'strava_refresh_token' => $refresh->refresh_token,
+                'strava_expires_at'    => Carbon::createFromTimestamp($refresh->expires_at),
+            ]);
+        }
+
+        $activities = Strava::activities($user->strava_token);
 
         return response()->json($activities);
     }
 
     public function singleActivity($id)
     {
-        $token = env('STRAVA_ACCESS_TOKEN');
+        $user = Auth::user();
 
-        $activity = Strava::activity($token, $id);
+        if (now()->timestamp >= $user->strava_expires_at->timestamp) {
+            $refresh = Strava::refreshToken($user->strava_refresh_token);
+            /** @var \App\Models\User $user **/
+            $user->update([
+                'strava_token'         => $refresh->access_token,
+                'strava_refresh_token' => $refresh->refresh_token,
+                'strava_expires_at'    => Carbon::createFromTimestamp($refresh->expires_at),
+            ]);
+        }
+
+        $activity = Strava::activity($user->strava_token, $id);
 
         return response()->json($activity);
+    }
+
+    public function disconnect()
+    {
+        $user = Auth::user();
+
+        Strava::unauthenticate($user->strava_token);
+        /** @var \App\Models\User $user **/
+        $user->update([
+            'strava_id'            => null,
+            'strava_token'         => null,
+            'strava_refresh_token' => null,
+            'strava_expires_at'    => null,
+        ]);
+
+        return back()->with('success', 'Strava disconnected');
     }
 }
