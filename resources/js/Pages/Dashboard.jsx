@@ -1,5 +1,5 @@
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { Head } from '@inertiajs/react';
+import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
+import { Head } from "@inertiajs/react";
 
 export default function Dashboard() {
     return (
@@ -17,6 +17,14 @@ export default function Dashboard() {
                     <div className="overflow-hidden bg-white shadow-sm sm:rounded-lg">
                         <div className="p-6 text-gray-900">
                             You're logged in!
+                        </div>
+                        <div className="p-6 border-t border-gray-200">
+                            <a
+                                href="/auth/strava/redirect"
+                                className="inline-block px-4 py-2 bg-orange-500 text-white font-semibold rounded-lg shadow-md hover:bg-orange-700"
+                            >
+                                Connect with Strava
+                            </a>
                         </div>
                     </div>
                 </div>

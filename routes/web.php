@@ -4,6 +4,7 @@ use App\Http\Controllers\ProfileController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
+use App\Http\Controllers\StravaController;
 
 Route::get('/', function () {
     return Inertia::render('Welcome', [
@@ -24,4 +25,10 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 
-require __DIR__.'/auth.php';
+Route::get('/auth/strava/redirect', [StravaController::class, 'redirect'])->middleware('auth')->name('strava.redirect');
+Route::get('/auth/strava/callback', [StravaController::class, 'callback'])->middleware('auth')->name('strava.callback');
+Route::get('/strava/athlete', [StravaController::class, 'athlete']);
+Route::get('/strava/activities', [StravaController::class, 'activities']);
+Route::get('/strava/activity/{id}', [StravaController::class, 'singleActivity']);
+
+require __DIR__ . '/auth.php';
