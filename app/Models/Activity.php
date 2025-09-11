@@ -36,9 +36,6 @@ class Activity extends Model
         'start_date' => 'datetime',
     ];
 
-    /**
-     * Mendefinisikan relasi bahwa setiap Aktivitas dimiliki oleh satu User.
-     */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
