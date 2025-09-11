@@ -30,9 +30,12 @@ Route::middleware('auth')->prefix('strava')->group(function () {
     Route::get('/callback', [StravaController::class, 'callback']);
     Route::post('/disconnect', [StravaController::class, 'disconnect']);
     Route::get('/athlete', [StravaController::class, 'athlete']);
-    Route::get('/activities', [StravaController::class, 'activities']);
+    Route::get('/activities', [StravaController::class, 'activities'])->name('strava.activities');
     Route::get('/activity/{id}', [StravaController::class, 'singleActivity']);
 });
+Route::get('/activities', function () {
+    return Inertia::render('Strava/Activities');
+})->middleware(['auth', 'verified'])->name('activities.index');
 
 
 

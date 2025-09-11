@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use CodeToad\Strava\StravaFacade as Strava;
 use Carbon\Carbon;
-use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 
 class StravaController extends Controller
