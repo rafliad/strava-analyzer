@@ -3,6 +3,7 @@ import { Head } from '@inertiajs/react';
 import axios from 'axios';
 import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
+import toast from 'react-hot-toast';
 
 // Fungsi helper untuk mendapatkan tanggal dalam format YYYY-MM-DD
 const getFormattedDate = (date) => {
@@ -33,10 +34,12 @@ export default function Index({ auth }) {
                 endDate
             });
             setAnalysisResult(response.data.analysis);
+            toast.success('Analysis complete!');
         } catch (err) {
             const errorMessage = err.response?.data?.error || 'An unknown error occurred.';
             setError(errorMessage);
             console.error(err);
+            toast.error('Failed to perform analysis. Please try again.');
         } finally {
             setIsLoading(false);
         }
