@@ -43,7 +43,7 @@ export default function Activities({ auth, activities }) {
                                     <li key={activity.id} className="py-4">
                                         <h3 className="text-lg font-semibold">{activity.name}</h3>
                                         <p className="text-sm text-gray-600">
-                                            <span>‍🚴‍♀️ {(activity.distance / 1000).toFixed(2)} km</span>
+                                            <span>🏃‍♂️ {(activity.distance / 1000).toFixed(2)} km</span>
                                             <span className="mx-2">|</span>
                                             <span>🕒 {new Date(activity.start_date).toLocaleDateString()}</span>
                                         </p>

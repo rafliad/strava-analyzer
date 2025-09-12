@@ -8,6 +8,7 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use App\Models\Activity;
 use App\Models\User;
+use Illuminate\Support\Facades\Cache;
 
 class StravaController extends Controller
 {
@@ -54,24 +55,30 @@ class StravaController extends Controller
     {
         $user = Auth::user();
         /** @var \App\Models\User $user **/
-        $this->checkAndRefreshToken($user);
-        $stravaActivities = Strava::activities($user->strava_token);
+        $cacheKey = "strava.activities.user.{$user->id}";
 
-        foreach ($stravaActivities as $stravaActivity) {
-            Activity::updateOrCreate(
-                ['strava_id' => $stravaActivity->id, 'user_id' => $user->id],
-                [
-                    'name' => $stravaActivity->name,
-                    'distance' => $stravaActivity->distance,
-                    'moving_time' => $stravaActivity->moving_time,
-                    'elapsed_time' => $stravaActivity->elapsed_time,
-                    'total_elevation_gain' => $stravaActivity->total_elevation_gain,
-                    'type' => $stravaActivity->type,
-                    'start_date' => Carbon::parse($stravaActivity->start_date_local),
-                ]
-            );
+        $stravaActivities = Cache::remember($cacheKey, now()->addMinutes(15), function () use ($user) {
+            $this->checkAndRefreshToken($user);
+            return Strava::activities($user->strava_token);
+        });
+
+        if (!empty($stravaActivities)) {
+            foreach ($stravaActivities as $stravaActivity) {
+                Activity::updateOrCreate(
+                    ['strava_id' => $stravaActivity->id, 'user_id' => $user->id],
+                    [
+                        'name' => $stravaActivity->name,
+                        'distance' => $stravaActivity->distance,
+                        'moving_time' => $stravaActivity->moving_time,
+                        'elapsed_time' => $stravaActivity->elapsed_time,
+                        'total_elevation_gain' => $stravaActivity->total_elevation_gain,
+                        'type' => $stravaActivity->type,
+                        'start_date' => Carbon::parse($stravaActivity->start_date_local),
+                    ]
+                );
+            }
         }
-        return back()->with('success', 'Activities have been synced successfully!');
+        return to_route('activities.index')->with('status', 'Activities synced successfully!');
     }
 
     public function singleActivity($id)
