@@ -39,6 +39,14 @@ export default function AuthenticatedLayout({ header, children }) {
                                     Activity
                                 </NavLink>
                             </div>
+                            <div className="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex">
+                                <NavLink
+                                    href={route("analysis.index")}
+                                    active={route().current("analysis.index")}
+                                >
+                                    Analysis
+                                </NavLink>
+                            </div>
                         </div>
 
                         <div className="hidden sm:ms-6 sm:flex sm:items-center">
@@ -147,6 +155,12 @@ export default function AuthenticatedLayout({ header, children }) {
                             active={route().current("activities.index")}
                         >
                             Activity
+                        </ResponsiveNavLink>
+                        <ResponsiveNavLink
+                            href={route("analysis.index")}
+                            active={route().current("analysis.index")}
+                        >
+                            Analysis
                         </ResponsiveNavLink>
                     </div>
 

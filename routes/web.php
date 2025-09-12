@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use App\Http\Controllers\StravaController;
 use App\Http\Controllers\ActivityController;
+use App\Http\Controllers\AnalysisController;
 
 Route::get('/', function () {
     return Inertia::render('Welcome', [
@@ -38,5 +39,13 @@ Route::middleware('auth')->prefix('strava')->name('strava.')->group(function () 
     Route::get('/activities', [StravaController::class, 'activities'])->name('activities');
     Route::get('/activity/{id}', [StravaController::class, 'singleActivity']);
 });
+
+Route::get('/analysis', [AnalysisController::class, 'index'])
+    ->middleware(['auth', 'verified'])
+    ->name('analysis.index');
+
+Route::post('/analysis/perform', [AnalysisController::class, 'performAnalysis'])
+    ->middleware(['auth', 'verified'])
+    ->name('analysis.perform');
 
 require __DIR__ . '/auth.php';
