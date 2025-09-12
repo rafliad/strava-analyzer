@@ -111,27 +111,6 @@ class StravaController extends Controller
         return response()->json($activity);
     }
 
-    public function dashboardStats()
-    {
-        $user = Auth::user();
-        /** @var \App\Models\User $user **/
-
-        $startOfMonth = now()->startOfMonth();
-
-        $stats = Cache::remember("dashboard.stats.user.{$user->id}", now()->addMinutes(30), function () use ($user, $startOfMonth) {
-            $activitiesThisMonth = $user->activities()->where('start_date', '>=', $startOfMonth)->get();
-
-            return [
-                'total_distance_month' => $activitiesThisMonth->sum('distance'),
-                'total_activities_month' => $activitiesThisMonth->count(),
-                'recent_activities' => $user->activities()->orderBy('start_date', 'desc')->limit(3)->get(),
-                'is_connected' => !is_null($user->strava_id),
-            ];
-        });
-
-        return response()->json($stats);
-    }
-
     public function disconnect()
     {
         $user = Auth::user();

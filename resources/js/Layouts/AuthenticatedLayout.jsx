@@ -4,19 +4,22 @@ import NavLink from "@/Components/NavLink";
 import ResponsiveNavLink from "@/Components/ResponsiveNavLink";
 import { Link, usePage } from "@inertiajs/react";
 import { useState, useEffect } from "react";
-import { Toaster, toast } from 'react-hot-toast';
+import toast, { Toaster } from 'react-hot-toast';
 
 
 export default function AuthenticatedLayout({ header, children }) {
-    const {user, flash} = usePage().props.auth;
+    const { auth: { user }, flash } = usePage().props;
 
     const [showingNavigationDropdown, setShowingNavigationDropdown] = useState(false);
 
     useEffect(() => {
-        if (flash && flash.success) {
+        if (flash.status) {
+            toast.success(flash.status);
+        }
+        if (flash.success) {
             toast.success(flash.success);
         }
-        if (flash && flash.error) {
+        if (flash.error) {
             toast.error(flash.error);
         }
     }, [flash]);

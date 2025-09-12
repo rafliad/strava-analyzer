@@ -7,6 +7,7 @@ use Inertia\Inertia;
 use App\Http\Controllers\StravaController;
 use App\Http\Controllers\ActivityController;
 use App\Http\Controllers\AnalysisController;
+use App\Http\Controllers\DashboardController;
 
 Route::get('/', function () {
     return Inertia::render('Welcome', [
@@ -17,9 +18,9 @@ Route::get('/', function () {
     ]);
 });
 
-Route::get('/dashboard', function () {
-    return Inertia::render('Dashboard');
-})->middleware(['auth', 'verified'])->name('dashboard');
+Route::get('/dashboard', [DashboardController::class, 'index'])
+    ->middleware(['auth', 'verified'])
+    ->name('dashboard');
 
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
@@ -35,7 +36,6 @@ Route::middleware('auth')->prefix('strava')->name('strava.')->group(function () 
     Route::get('/callback', [StravaController::class, 'callback']);
     Route::post('/disconnect', [StravaController::class, 'disconnect'])->name('disconnect');
     Route::post('/sync', [StravaController::class, 'sync'])->name('sync');
-    Route::get('/dashboard-stats', [StravaController::class, 'dashboardStats'])->name('dashboardStats');
     Route::get('/athlete', [StravaController::class, 'athlete']);
     Route::get('/activity/{id}', [StravaController::class, 'singleActivity']);
 });
