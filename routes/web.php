@@ -31,12 +31,12 @@ Route::get('/activities', [ActivityController::class, 'index'])
     ->name('activities.index');
 
 Route::middleware('auth')->prefix('strava')->name('strava.')->group(function () {
-    Route::get('/connect', [StravaController::class, 'redirect']);
+    Route::get('/connect', [StravaController::class, 'redirect'])->name('redirect');
     Route::get('/callback', [StravaController::class, 'callback']);
-    Route::post('/disconnect', [StravaController::class, 'disconnect']);
+    Route::post('/disconnect', [StravaController::class, 'disconnect'])->name('disconnect');
     Route::post('/sync', [StravaController::class, 'sync'])->name('sync');
+    Route::get('/dashboard-stats', [StravaController::class, 'dashboardStats'])->name('dashboardStats');
     Route::get('/athlete', [StravaController::class, 'athlete']);
-    Route::get('/activities', [StravaController::class, 'activities'])->name('activities');
     Route::get('/activity/{id}', [StravaController::class, 'singleActivity']);
 });
 

@@ -9,6 +9,8 @@ use Illuminate\Support\Facades\Auth;
 use App\Models\Activity;
 use App\Models\User;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
+use Exception;
 
 class StravaController extends Controller
 {
@@ -19,18 +21,27 @@ class StravaController extends Controller
 
     public function callback(Request $request)
     {
-        $token = Strava::token($request->code);
+        if ($request->has('error')) {
+            return redirect('/dashboard')->with('error', 'Failed to connect to Strava. Authorization was denied.');
+        }
 
-        $user = Auth::user();
-        /** @var \App\Models\User $user **/
-        $user->update([
-            'strava_id'            => $token->athlete->id,
-            'strava_token'         => $token->access_token,
-            'strava_refresh_token' => $token->refresh_token,
-            'strava_expires_at'    => Carbon::createFromTimestamp($token->expires_at),
-        ]);
+        try {
+            $token = Strava::token($request->code);
+            $user = Auth::user();
 
-        return redirect()->route('dashboard')->with('success', 'Strava connected!');
+            /** @var \App\Models\User $user **/
+            $user->update([
+                'strava_id'            => $token->athlete->id,
+                'strava_token'         => $token->access_token,
+                'strava_refresh_token' => $token->refresh_token,
+                'strava_expires_at'    => Carbon::createFromTimestamp($token->expires_at),
+            ]);
+
+            return redirect()->route('dashboard')->with('success', 'Strava connected!');
+        } catch (Exception $e) {
+            Log::error('Strava callback error: ' . $e->getMessage());
+            return redirect('/dashboard')->with('error', 'An error occurred while connecting to Strava. Please try again.');
+        }
     }
 
     public function athlete()
@@ -78,7 +89,7 @@ class StravaController extends Controller
                 );
             }
         }
-        return to_route('activities.index')->with('status', 'Activities synced successfully!');
+        return redirect()->route('activities.index')->with('success', 'Activities have been synced!');
     }
 
     public function singleActivity($id)
@@ -100,11 +111,36 @@ class StravaController extends Controller
         return response()->json($activity);
     }
 
+    public function dashboardStats()
+    {
+        $user = Auth::user();
+        /** @var \App\Models\User $user **/
+
+        $startOfMonth = now()->startOfMonth();
+
+        $stats = Cache::remember("dashboard.stats.user.{$user->id}", now()->addMinutes(30), function () use ($user, $startOfMonth) {
+            $activitiesThisMonth = $user->activities()->where('start_date', '>=', $startOfMonth)->get();
+
+            return [
+                'total_distance_month' => $activitiesThisMonth->sum('distance'),
+                'total_activities_month' => $activitiesThisMonth->count(),
+                'recent_activities' => $user->activities()->orderBy('start_date', 'desc')->limit(3)->get(),
+                'is_connected' => !is_null($user->strava_id),
+            ];
+        });
+
+        return response()->json($stats);
+    }
+
     public function disconnect()
     {
         $user = Auth::user();
 
-        Strava::unauthenticate($user->strava_token);
+        try {
+            Strava::unauthenticate($user->strava_token);
+        } catch (Exception $e) {
+            Log::info('Strava deauthorization failed, likely already revoked by user. Error: ' . $e->getMessage());
+        }
         /** @var \App\Models\User $user **/
         $user->update([
             'strava_id'            => null,
@@ -113,7 +149,7 @@ class StravaController extends Controller
             'strava_expires_at'    => null,
         ]);
 
-        return back()->with('success', 'Strava disconnected');
+        return redirect()->route('dashboard')->with('success', 'Strava disconnected successfully.');
     }
 
     private function checkAndRefreshToken(User $user)

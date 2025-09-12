@@ -23,6 +23,7 @@
         "vite": "^7.0.4"
     },
     "dependencies": {
+        "react-hot-toast": "^2.6.0",
         "react-markdown": "^10.1.0"
     }
 }
