@@ -19,70 +19,89 @@ class AnalysisController extends Controller
     /**
      * Memproses permintaan analisis performa.
      */
-    public function performAnalysis()
+    public function performAnalysis(Request $request)
     {
+        $validated = $request->validate([
+            'startDate' => 'required|date',
+            'endDate' => 'required|date|after_or_equal:startDate',
+        ]);
+
+        $user = Auth::user();
+        /** @var \App\Models\User $user **/
+
+        $activities = $user->activities()
+            ->whereBetween('start_date', [$validated['startDate'], $validated['endDate']])
+            ->orderBy('start_date', 'asc')
+            ->get();
+
+        if ($activities->isEmpty()) {
+            return response()->json(['error' => 'No activities found in the selected date range.'], 422);
+        }
+
+        $promptData = $activities->map(function ($activity) {
+            return sprintf(
+                "- Tanggal: %s, Jenis: %s, Jarak: %.2f km, Waktu Bergerak: %d menit",
+                $activity->start_date->format('Y-m-d'),
+                $activity->type,
+                $activity->distance / 1000,
+                $activity->moving_time / 60
+            );
+        })->implode("\n");
+
+        $startDateFormatted = \Carbon\Carbon::parse($validated['startDate'])->format('d F Y');
+        $endDateFormatted = \Carbon\Carbon::parse($validated['endDate'])->format('d F Y');
+
+        $systemPrompt = "Anda adalah pelatih lari profesional. Gunakan Markdown.
+        Berikut contoh cara memberi analisis:
+
+        ## Analisis Tren
+        Anda konsisten dalam melakukan 3-4 kali latihan per minggu. Pace rata-rata membaik dari 7:00/km ke 6:30/km. Heart rate cenderung lebih stabil di zona 2.
+
+        ## Rekomendasi Latihan
+        - Tambahkan easy run 30-40 menit untuk meningkatkan endurance.
+        - Lakukan interval 5x400m dengan istirahat 2 menit untuk melatih kecepatan.
+        - Pastikan ada 1 hari recovery penuh tanpa lari.
+        Sekarang gunakan format dan gaya yang sama untuk data berikut.
+
+        Gunakan format Markdown berikut:
+        - Gunakan `##` untuk judul utama.
+        - Gunakan `###` untuk sub-judul (contoh: Analisis Tren, Rekomendasi Latihan).
+        - Pisahkan setiap paragraf dengan satu baris kosong.
+        - Untuk saran, gunakan bullet point `-`.
+        - Gunakan **bold** hanya untuk menekankan kata penting, bukan untuk judul.";
+
+
+        $userPrompt = "Berikut adalah data lari saya dari tanggal {$startDateFormatted} hingga {$endDateFormatted}:\n\n{$promptData}\n\n Tolong analisis sesuai format yang sudah ditentukan.";
+
         try {
-            $user = Auth::user();
-            /** @var \App\Models\User $user **/
-            $activities = $user->activities()->orderBy('start_date', 'desc')->take(15)->get();
+            $apiKey = config('services.gemini.key');
+            $apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={$apiKey}";
 
-            if ($activities->isEmpty()) {
-                return response()->json(['error' => 'Not enough activity data to analyze. Please sync with Strava first.'], 422);
-            }
-
-            // 2. Format data menjadi sebuah prompt yang jelas untuk AI
-            $prompt = $this->buildPrompt($activities);
-            $apiKey = env('GEMINI_API_KEY');
-            if (!$apiKey) {
-                throw new Exception('GEMINI_API_KEY is not set.');
-            }
-            $apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key={$apiKey}";
-
-            // 3. Kirim data ke Gemini API
             $response = Http::post($apiUrl, [
                 'contents' => [
                     [
                         'parts' => [
-                            ['text' => $prompt]
+                            ['text' => $userPrompt]
                         ]
+                    ]
+                ],
+                'systemInstruction' => [
+                    'parts' => [
+                        ['text' => $systemPrompt]
                     ]
                 ]
             ]);
 
-            if ($response->failed()) {
-                Log::error('Gemini API request failed', ['response' => $response->body()]);
-                throw new Exception('Failed to get a response from the AI service.');
+            if ($response->successful() && isset($response->json()['candidates'][0]['content']['parts'][0]['text'])) {
+                $analysisText = $response->json()['candidates'][0]['content']['parts'][0]['text'];
+                return response()->json(['analysis' => $analysisText]);
+            } else {
+                Log::error('Gemini API Error: ' . $response->body());
+                return response()->json(['error' => 'Failed to get analysis from AI service.'], 500);
             }
-
-            // 4. Ekstrak dan kembalikan teks analisis
-            $analysisText = $response->json('candidates.0.content.parts.0.text');
-
-            return response()->json(['analysis' => $analysisText]);
-        } catch (Exception $e) {
-            Log::error('Analysis Error: ' . $e->getMessage());
-            return response()->json(['error' => 'An unexpected error occurred during analysis.'], 500);
+        } catch (\Exception $e) {
+            Log::error('Exception calling Gemini API: ' . $e->getMessage());
+            return response()->json(['error' => 'An unexpected error occurred while contacting the AI service.'], 500);
         }
-    }
-
-    /**
-     * Membangun prompt teks dari koleksi aktivitas.
-     */
-    private function buildPrompt($activities)
-    {
-        $dataText = "";
-        foreach ($activities as $activity) {
-            $distanceKm = round($activity->distance / 1000, 2);
-            $movingTimeMinutes = round($activity->moving_time / 60);
-            $dataText .= "- {$activity->start_date->format('d M Y')}: Tipe {$activity->type}, Jarak {$distanceKm} km, Waktu Bergerak {$movingTimeMinutes} menit. Nama: {$activity->name}\n";
-        }
-
-        return "Anda adalah seorang pelatih lari ahli kelas dunia. Analisis data performa berikut dari seorang atlet. 
-        Berikan ringkasan singkat dalam satu paragraf. 
-        Kemudian, identifikasi 2-3 tren positif atau pencapaian yang menonjol.
-        Terakhir, berikan satu saran konkret dan bisa ditindaklanjuti untuk membantu atlet ini berkembang.
-        Gunakan format markdown dan berikan jawaban dalam Bahasa Indonesia.
-
-        Berikut adalah data aktivitas terbarunya (diurutkan dari yang terbaru):
-        {$dataText}";
     }
 }
