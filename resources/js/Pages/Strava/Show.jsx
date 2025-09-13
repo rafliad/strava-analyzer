@@ -94,6 +94,21 @@ export default function Show({ auth, activity }) {
         });
     })();
 
+    const customTooltipFormatter = (value, name) => {
+        if (value === null || value === undefined) return null;
+
+        switch (name) {
+            case 'Pace':
+                return [`${value.toFixed(2)} min/km`, name];
+            case 'Detak Jantung':
+                return [`${value} bpm`, name];
+            case 'Power':
+                return [`${value} W`, name];
+            default:
+                return [value, name];
+        }
+    };
+
     return (
         <AuthenticatedLayout
             user={auth.user}
@@ -152,7 +167,7 @@ export default function Show({ auth, activity }) {
                                         {/* {visibleData.heartrate && <YAxis yAxisId="hr" orientation="right" label={{ value: 'Detak Jantung (bpm)', angle: -90, position: 'insideRight', offset: 10 }} stroke="#82ca9d" />} */}
                                         {/* {visibleData.power && <YAxis yAxisId="power" orientation="right" label={{ value: 'Power (W)', angle: -90, position: 'insideRight', offset: visibleData.heartrate ? 60 : 10 }} stroke="#8884d8" />} */}
                                         
-                                        <Tooltip labelFormatter={(label) => `Jarak: ${label} km`} />
+                                        <Tooltip labelFormatter={(label) => `Jarak: ${label} km`} formatter={customTooltipFormatter}/>
                                         <Legend verticalAlign="top" wrapperStyle={{ paddingBottom: "10px" }} />
                                         
                                         {/* Garis data dinamis */}
