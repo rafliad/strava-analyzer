@@ -25,6 +25,7 @@ class Activity extends Model
         'total_elevation_gain',
         'type',
         'start_date',
+        'streams',
     ];
 
     /**
@@ -34,6 +35,7 @@ class Activity extends Model
      */
     protected $casts = [
         'start_date' => 'datetime',
+        'streams' => 'array',
     ];
 
     public function user(): BelongsTo

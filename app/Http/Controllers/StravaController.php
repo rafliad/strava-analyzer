@@ -75,6 +75,7 @@ class StravaController extends Controller
 
         if (!empty($stravaActivities)) {
             foreach ($stravaActivities as $stravaActivity) {
+                $streams = $this->fetchActivityStreams($user, $stravaActivity->id);
                 Activity::updateOrCreate(
                     ['strava_id' => $stravaActivity->id, 'user_id' => $user->id],
                     [
@@ -85,6 +86,7 @@ class StravaController extends Controller
                         'total_elevation_gain' => $stravaActivity->total_elevation_gain,
                         'type' => $stravaActivity->type,
                         'start_date' => Carbon::parse($stravaActivity->start_date_local),
+                        'streams' => json_encode($streams),
                     ]
                 );
             }
@@ -143,6 +145,42 @@ class StravaController extends Controller
             ]);
 
             $user->refresh();
+        }
+    }
+
+    private function fetchActivityStreams(User $user, int $activityId): array
+    {
+        try {
+            $this->checkAndRefreshToken($user);
+            $streams = Strava::activityStream($user->strava_token, $activityId, ['distance', 'time', 'heartrate', 'watts']);
+
+            $processedStreams = [];
+            $distanceStream = null;
+            $timeStream = null;
+            $heartrateStream = null;
+            $wattsStream = null;
+
+            foreach ($streams as $stream) {
+                if ($stream->type === 'distance') $distanceStream = $stream->data;
+                if ($stream->type === 'time') $timeStream = $stream->data;
+                if ($stream->type === 'heartrate') $heartrateStream = $stream->data;
+                if ($stream->type === 'watts') $wattsStream = $stream->data;
+            }
+
+            if ($distanceStream && $timeStream) {
+                for ($i = 0; $i < count($distanceStream); $i++) {
+                    $processedStreams[] = [
+                        'distance' => $distanceStream[$i],
+                        'time' => $timeStream[$i],
+                        'heartrate' => $heartrateStream[$i] ?? null,
+                        'watts' => $wattsStream[$i] ?? null,
+                    ];
+                }
+            }
+            return $processedStreams;
+        } catch (\Exception $e) {
+            Log::error("Failed to fetch streams for activity {$activityId}: " . $e->getMessage());
+            return [];
         }
     }
 }

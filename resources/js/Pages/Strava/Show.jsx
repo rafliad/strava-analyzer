@@ -1,9 +1,8 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, Link } from '@inertiajs/react';
+import {LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer} from 'recharts';
 
 export default function Show({ auth, activity }) {
-
-    // Helper function untuk memformat waktu dari detik ke Jam:Menit:Detik
     const formatTime = (seconds) => {
         if (!seconds) return '00:00:00';
         const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
@@ -20,6 +19,12 @@ export default function Show({ auth, activity }) {
         { name: 'Tipe', value: activity.type },
         { name: 'Tanggal', value: new Date(activity.start_date).toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) },
     ];
+
+    const arrayActivity = JSON.parse(activity.streams);
+    const streams = arrayActivity.map(stream => ({
+        ...stream,
+        distance_km: parseFloat((stream.distance / 1000).toFixed(2)),
+    })) || [];
 
     return (
         <AuthenticatedLayout
@@ -38,7 +43,7 @@ export default function Show({ auth, activity }) {
             <Head title={activity.name} />
 
             <div className="py-12">
-                <div className="max-w-7xl mx-auto sm:px-6 lg:px-8">
+                <div className="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
                     <div className="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                         <div className="p-6 border-b border-gray-200">
                             <h3 className="text-2xl font-bold text-gray-900">{activity.name}</h3>
@@ -47,13 +52,37 @@ export default function Show({ auth, activity }) {
                             <dl className="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2">
                                 {stats.map((stat) => (
                                     <div key={stat.name} className="sm:col-span-1">
-                                        <dt className="mt-1 text-lg font-semibold text-gray-900">{stat.name}</dt>
-                                        <dd className="text-sm font-medium text-gray-500">{stat.value}</dd>
+                                        <dt className="text-sm font-medium text-gray-500">{stat.name}</dt>
+                                        <dd className="mt-1 text-lg font-semibold text-gray-900">{stat.value}</dd>
                                     </div>
                                 ))}
                             </dl>
                         </div>
                     </div>
+
+                    {streams.length > 0 && (
+                        <div className="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6" style={{ height: '400px' }}>
+                             <h3 className="text-lg font-semibold mb-4 text-center">Grafik Performa</h3>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart
+                                    data={streams}
+                                    margin={{ top: 5, right: 30, left: 20, bottom: 20 }}
+                                >
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="distance_km" type="number" domain={['dataMin', 'dataMax']} label={{ value: 'Jarak (km)', position: 'insideBottom', offset: -10 }}/>
+                                    <YAxis yAxisId="left" label={{ value: 'Power (W)', angle: -90, position: 'insideLeft' }} stroke="#8884d8" />
+                                    <YAxis yAxisId="right" orientation="right" label={{ value: 'Detak Jantung (bpm)', angle: -90, position: 'insideRight', offset: 10 }} stroke="#dd0447" />
+                                    <Tooltip
+                                        formatter={(value, name) => [value, name === 'Power' ? 'Power' : 'Detak Jantung']}
+                                        labelFormatter={(label) => `Jarak: ${label} km`}
+                                    />
+                                    <Legend verticalAlign="top" wrapperStyle={{paddingBottom: "10px"}}/>
+                                    <Line yAxisId="left" type="monotone" dataKey="watts" stroke="#8884d8" dot={false} name="Power"/>
+                                    <Line yAxisId="right" type="monotone" dataKey="heartrate" stroke="#dd0447" dot={false} name="Detak Jantung"/>
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </div>
+                    )}
                 </div>
             </div>
         </AuthenticatedLayout>
