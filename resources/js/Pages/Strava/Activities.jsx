@@ -1,5 +1,5 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { Head, router } from '@inertiajs/react';
+import { Head, router, Link } from '@inertiajs/react';
 import { useState } from 'react';
 
 export default function Activities({ auth, activities }) {
@@ -11,6 +11,13 @@ export default function Activities({ auth, activities }) {
             onFinish: () => setIsSyncing(false),
             preserveScroll: true,
         });
+    };
+
+    const formatTime = (seconds) => {
+        const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
+        const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
+        const s = (seconds % 60).toString().padStart(2, '0');
+        return `${h}:${m}:${s}`;
     };
 
     return (
@@ -41,12 +48,23 @@ export default function Activities({ auth, activities }) {
                             {activities.length > 0 ? (
                                 activities.map((activity) => (
                                     <li key={activity.id} className="py-4">
-                                        <h3 className="text-lg font-semibold">{activity.name}</h3>
-                                        <p className="text-sm text-gray-600">
-                                            <span>🏃‍♂️ {(activity.distance / 1000).toFixed(2)} km</span>
-                                            <span className="mx-2">|</span>
-                                            <span>🕒 {new Date(activity.start_date).toLocaleDateString()}</span>
-                                        </p>
+                                        <Link href={route('activities.show', activity.id)} className="block hover:bg-gray-50 p-2 rounded-lg">
+                                                <div className="flex justify-between items-center">
+                                                    <div>
+                                                        <h3 className="text-lg font-semibold text-indigo-600">{activity.name}</h3>
+                                                        <p className="text-sm text-gray-600 mt-1">
+                                                            <span className="font-medium">{(activity.distance / 1000).toFixed(2)} km</span>
+                                                            <span className="mx-2">|</span>
+                                                            <span>{formatTime(activity.moving_time)}</span>
+                                                            <span className="mx-2">|</span>
+                                                            <span>{new Date(activity.start_date).toLocaleDateString()}</span>
+                                                        </p>
+                                                    </div>
+                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
+                                                        <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                                                    </svg>
+                                                </div>
+                                            </Link>
                                     </li>
                                 ))
                             ) : (

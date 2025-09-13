@@ -36,8 +36,6 @@ Route::middleware('auth')->prefix('strava')->name('strava.')->group(function () 
     Route::get('/callback', [StravaController::class, 'callback']);
     Route::post('/disconnect', [StravaController::class, 'disconnect'])->name('disconnect');
     Route::post('/sync', [StravaController::class, 'sync'])->name('sync');
-    Route::get('/athlete', [StravaController::class, 'athlete']);
-    Route::get('/activity/{id}', [StravaController::class, 'singleActivity']);
 });
 
 Route::get('/analysis', [AnalysisController::class, 'index'])
@@ -47,5 +45,9 @@ Route::get('/analysis', [AnalysisController::class, 'index'])
 Route::post('/analysis/perform', [AnalysisController::class, 'performAnalysis'])
     ->middleware(['auth', 'verified'])
     ->name('analysis.perform');
+
+Route::get('/activities/{activity}', [ActivityController::class, 'show'])
+    ->middleware(['auth', 'verified'])
+    ->name('activities.show');
 
 require __DIR__ . '/auth.php';
