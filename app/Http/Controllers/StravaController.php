@@ -152,19 +152,21 @@ class StravaController extends Controller
     {
         try {
             $this->checkAndRefreshToken($user);
-            $streams = Strava::activityStream($user->strava_token, $activityId, ['distance', 'time', 'heartrate', 'watts']);
+            $streams = Strava::activityStream($user->strava_token, $activityId, ['distance', 'time', 'heartrate', 'watts', 'altitude']);
 
             $processedStreams = [];
             $distanceStream = null;
             $timeStream = null;
             $heartrateStream = null;
             $wattsStream = null;
+            $altitudeStream = null;
 
             foreach ($streams as $stream) {
                 if ($stream->type === 'distance') $distanceStream = $stream->data;
                 if ($stream->type === 'time') $timeStream = $stream->data;
                 if ($stream->type === 'heartrate') $heartrateStream = $stream->data;
                 if ($stream->type === 'watts') $wattsStream = $stream->data;
+                if ($stream->type === 'altitude') $altitudeStream = $stream->data;
             }
 
             if ($distanceStream && $timeStream) {
@@ -174,6 +176,7 @@ class StravaController extends Controller
                         'time' => $timeStream[$i],
                         'heartrate' => $heartrateStream[$i] ?? null,
                         'watts' => $wattsStream[$i] ?? null,
+                        'altitude' => $altitudeStream[$i] ?? null,
                     ];
                 }
             }
