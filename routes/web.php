@@ -38,13 +38,11 @@ Route::middleware('auth')->prefix('strava')->name('strava.')->group(function () 
     Route::post('/sync', [StravaController::class, 'sync'])->name('sync');
 });
 
-Route::get('/analysis', [AnalysisController::class, 'index'])
-    ->middleware(['auth', 'verified'])
-    ->name('analysis.index');
-
-Route::post('/analysis/perform', [AnalysisController::class, 'performAnalysis'])
-    ->middleware(['auth', 'verified'])
-    ->name('analysis.perform');
+Route::middleware('auth')->prefix('analysis')->name('analysis.')->group(function () {
+    Route::get('/', [AnalysisController::class, 'index'])->name('index');
+    Route::post('/perform', [AnalysisController::class, 'performAnalysis'])->name('perform');
+    Route::post('/activity/{activity}', [AnalysisController::class, 'performSingleActivityAnalysis'])->name('performSingle');
+});
 
 Route::get('/activities/{activity}', [ActivityController::class, 'show'])
     ->middleware(['auth', 'verified'])

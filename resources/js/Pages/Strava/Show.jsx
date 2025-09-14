@@ -1,22 +1,27 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, Link } from '@inertiajs/react';
 import { useState, useMemo } from 'react';
-import {AreaChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer} from 'recharts';
+import {
+    AreaChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
+} from 'recharts';
+import axios from 'axios';
+import toast from 'react-hot-toast';
+import ReactMarkdown from 'react-markdown';
 
+
+// Komponen Toggle Switch yang bisa digunakan kembali
 const ToggleSwitch = ({ label, isEnabled, onToggle }) => (
     <div className="flex items-center space-x-2">
         <label htmlFor={label} className="text-sm font-medium text-gray-700">{label}</label>
         <button
             id={label}
             onClick={onToggle}
-            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${isEnabled ? 'bg-indigo-600' : 'bg-gray-200'
-                }`}
+            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${isEnabled ? 'bg-indigo-600' : 'bg-gray-200'}`}
             type="button"
         >
             <span
                 aria-hidden="true"
-                className={`inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isEnabled ? 'translate-x-5' : 'translate-x-0'
-                    }`}
+                className={`inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isEnabled ? 'translate-x-5' : 'translate-x-0'}`}
             />
         </button>
     </div>
@@ -30,12 +35,37 @@ export default function Show({ auth, activity }) {
         power: false,
     });
 
+    // NOTE: State baru untuk analisis aktivitas tunggal
+    const [singleAnalysisResult, setSingleAnalysisResult] = useState(null);
+    const [isAnalyzing, setIsAnalyzing] = useState(false);
+
     const handleToggle = (key) => {
         setVisibleData(prev => ({ ...prev, [key]: !prev[key] }));
     };
 
+    // NOTE: Fungsi baru untuk menangani permintaan analisis
+    const handleSingleAnalysis = async () => {
+        setIsAnalyzing(true);
+        setSingleAnalysisResult(null);
+        toast.loading('Analyzing your activity with Gemini AI...');
+
+        try {
+            const response = await axios.post(route('analysis.performSingle', { activity: activity.id }));
+            setSingleAnalysisResult(response.data.analysis);
+            toast.dismiss(); // Hapus toast loading
+            toast.success('Analysis complete!');
+        } catch (error) {
+            console.error('Error performing single analysis:', error);
+            toast.dismiss();
+            toast.error('Failed to analyze this activity.');
+        } finally {
+            setIsAnalyzing(false);
+        }
+    };
+
+
     const formatTime = (seconds) => {
-        if (!seconds) return '00:00:00';
+        if (seconds === null || seconds === undefined) return '00h 00m 00s';
         const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
         const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
         const s = (seconds % 60).toString().padStart(2, '0');
@@ -59,13 +89,9 @@ export default function Show({ auth, activity }) {
     ];
 
     const streams = useMemo(() => {
-        const parsedStreams = typeof activity.streams === 'string'
-            ? JSON.parse(activity.streams)
-            : activity.streams || [];
-
-        if (parsedStreams.length === 0) {
-            return [];
-        }
+        if (!activity.streams) return [];
+        const parsedStreams = JSON.parse(activity.streams);
+        if (!Array.isArray(parsedStreams) || parsedStreams.length === 0) return [];
 
         return parsedStreams.map((stream, index, array) => {
             let pace = 0;
@@ -75,7 +101,7 @@ export default function Show({ auth, activity }) {
                 const deltaTime = stream.time - prevStream.time;
                 if (deltaDistance > 0 && deltaTime > 0) {
                     const secondsPerKm = (deltaTime / deltaDistance) * 1000;
-                    pace = secondsPerKm / 60; // Pace dalam menit desimal
+                    pace = secondsPerKm / 60;
                 }
             }
             return {
@@ -133,13 +159,41 @@ export default function Show({ auth, activity }) {
                         <div className="bg-gray-50 px-6 py-5">
                             <dl className="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2">
                                 {stats.map((stat) => (
-                                    <div key={stat.name} className="sm-col-span-1">
+                                    <div key={stat.name} className="sm:col-span-1">
                                         <dt className="text-sm font-medium text-gray-500">{stat.name}</dt>
                                         <dd className="mt-1 text-lg font-semibold text-gray-900">{stat.value}</dd>
                                     </div>
                                 ))}
                             </dl>
                         </div>
+                    </div>
+
+                    {/* NOTE: Bagian baru untuk tombol dan hasil analisis */}
+                    <div className="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6">
+                        <div className="flex justify-center">
+                             <button
+                                 onClick={handleSingleAnalysis}
+                                 disabled={isAnalyzing}
+                                 className="inline-flex justify-center py-2 px-6 border border-transparent shadow-sm text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+                             >
+                                 {isAnalyzing ? 'Analyzing...' : 'Analyze This Activity'}
+                             </button>
+                         </div>
+
+                        {singleAnalysisResult && (
+                             <div className="mt-6 prose prose-lg max-w-none">
+                                 <ReactMarkdown
+                                    components={{
+                                        h2: ({node, ...props}) => <h2 className="text-xl font-bold mt-6 mb-3" {...props} />,
+                                        h3: ({node, ...props}) => <h3 className="text-lg font-semibold mt-4 mb-2" {...props} />,
+                                        p: ({node, ...props}) => <p className="mb-4 leading-relaxed" {...props} />,
+                                        li: ({node, ...props}) => <li className="mb-2 list-disc ml-6" {...props} />,
+                                    }}
+                                 >
+                                    {singleAnalysisResult}
+                                 </ReactMarkdown>
+                             </div>
+                         )}
                     </div>
 
                     {streams.length > 0 && (
@@ -156,15 +210,12 @@ export default function Show({ auth, activity }) {
                                         <CartesianGrid strokeDasharray="3 3" />
                                         <XAxis dataKey="distance_km" type="number" domain={['dataMin', 'dataMax']} label={{ value: 'Jarak (km)', position: 'insideBottom', offset: -10 }} />
                                         <YAxis yAxisId="altitude" orientation="left" label={{ value: 'Elevasi (m)', angle: -90, position: 'insideLeft' }} stroke="#8884d8" domain={['dataMin - 20', 'dataMax + 20']} />
-
-                                        {visibleData.pace && (<YAxis yAxisId="pace" orientation="right" label={{ value: 'Pace (min/km)', angle: -90, position: 'right'}} stroke="#ff7300" reversed={true} domain={paceDomain} tickFormatter={formatPace}/>)}
-
+                                        {visibleData.pace && <YAxis yAxisId="pace" orientation="right" label={{ value: 'Pace (min/km)', angle: -90, position: 'insideRight' }} stroke="#ff7300" reversed={true} domain={paceDomain} tickFormatter={formatPace} />}
                                         <Tooltip labelFormatter={(label) => `Jarak: ${label.toFixed(2)} km`} formatter={customTooltipFormatter} />
                                         <Legend verticalAlign="top" wrapperStyle={{ paddingBottom: "10px" }} />
                                         <Area yAxisId="altitude" type="monotone" dataKey="altitude" stroke="#cccccc" fill="#cccccc" dot={false} name="Elevasi" />
-                                        
                                         {visibleData.pace && <Line yAxisId="pace" type="monotone" dataKey="pace" stroke="#ff7300" dot={false} name="Pace" />}
-                                        {visibleData.heartrate && <Line yAxisId="hr" type="monotone" dataKey="heartrate" stroke="#dd0447" dot={false} name="Detak Jantung" />}
+                                        {visibleData.heartrate && <Line yAxisId="hr" type="monotone" dataKey="heartrate" stroke="#82ca9d" dot={false} name="Detak Jantung" />}
                                         {visibleData.power && <Line yAxisId="power" type="monotone" dataKey="watts" stroke="#8884d8" dot={false} name="Power" />}
                                     </AreaChart>
                                 </ResponsiveContainer>
