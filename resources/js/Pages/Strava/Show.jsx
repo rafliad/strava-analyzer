@@ -92,6 +92,8 @@ export default function Show({ auth, activity }) {
         if (!activity.streams) return [];
         const parsedStreams = JSON.parse(activity.streams);
         if (!Array.isArray(parsedStreams) || parsedStreams.length === 0) return [];
+        const PACE_THRESHOLD = 20;
+
 
         return parsedStreams.map((stream, index, array) => {
             let pace = 0;
@@ -104,21 +106,30 @@ export default function Show({ auth, activity }) {
                     pace = secondsPerKm / 60;
                 }
             }
+            const finalPace = (pace > 0 && pace < PACE_THRESHOLD) ? parseFloat(pace.toFixed(2)) : null;
+
             return {
                 ...stream,
                 distance_km: parseFloat((stream.distance / 1000).toFixed(2)),
-                pace: pace > 0 ? parseFloat(pace.toFixed(2)) : null,
+                pace: finalPace,
             };
         });
     }, [activity.streams]);
 
     const paceDomain = useMemo(() => {
-        if (streams.length === 0) return [0, 20];
-        const paceValues = streams.map(s => s.pace).filter(p => p !== null && p > 0);
-        if (paceValues.length === 0) return [0, 20];
+        if (streams.length === 0) return [3, 10];
+        
+        const paceValues = streams.map(s => s.pace).filter(p => p !== null);
+
+        if (paceValues.length === 0) return [3, 10];
+
         const minPace = Math.min(...paceValues);
         const maxPace = Math.max(...paceValues);
-        return [Math.floor(minPace * 0.9), Math.ceil(maxPace * 1.1)];
+
+        const lowerBound = Math.floor(minPace * 0.9);
+        const upperBound = Math.ceil(maxPace * 1.1);
+
+        return [lowerBound, upperBound];
     }, [streams]);
 
     const customTooltipFormatter = (value, name) => {
