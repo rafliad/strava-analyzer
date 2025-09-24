@@ -109,17 +109,13 @@ class AnalysisController extends Controller
         Required structure:  
         # Training Performance Analysis
 
-        **## General Summary**  
-        - High-level overview of training within the selected date range.
+        **## General Summary** - High-level overview of training within the selected date range.
 
-        **## Positive Trends**  
-        - Key improvements or consistent efforts.
+        **## Positive Trends** - Key improvements or consistent efforts.
 
-        **## Areas for Improvement**  
-        - One or two constructive suggestions.
+        **## Areas for Improvement** - One or two constructive suggestions.
 
-        **## Training Suggestions**  
-        - One or two simple workout recommendations.
+        **## Training Suggestions** - One or two simple workout recommendations.
 
         PROMPT;
         return $systemPrompt . "\n\nHere is the activity data from {$startDate} to {$endDate}:\n" . $activityData;
@@ -153,15 +149,15 @@ class AnalysisController extends Controller
 
         ## Performance Summary
 
-        - [one or two sentences summarizing the session]
+        - [one or two sentences summarizing the session based on the provided details]
 
         ## Pace & Heart Rate Analysis
 
-        - [comments about pace stability, HR behavior, cardiac drift if any]
+        - [Analyze the relationship between pace and heart rate. Critically, use the provided "Split analysis" and "Cardiac drift note" data below to determine if cardiac drift occurred. Explain what this means for the athlete (e.g., potential fatigue, dehydration, or strong endurance if no drift is present).]
 
         ## Power & Hill Performance
 
-        - [comments about power stability and how elevation affected you]
+        - [comments about power stability and how elevation affected you, based on the split data if available]
 
         ## Conclusion & Tips
 
