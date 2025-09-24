@@ -226,7 +226,7 @@ export default function Show({ auth, activity }) {
                                         <Legend verticalAlign="top" wrapperStyle={{ paddingBottom: "10px" }} />
                                         <Area yAxisId="altitude" type="monotone" dataKey="altitude" stroke="#cccccc" fill="#cccccc" dot={false} name="Elevasi" />
                                         {visibleData.pace && <Line yAxisId="pace" type="monotone" dataKey="pace" stroke="#ff7300" dot={false} name="Pace" />}
-                                        {visibleData.heartrate && <Line yAxisId="hr" type="monotone" dataKey="heartrate" stroke="#82ca9d" dot={false} name="Detak Jantung" />}
+                                        {visibleData.heartrate && <Line yAxisId="hr" type="monotone" dataKey="heartrate" stroke="#dd0447" dot={false} name="Detak Jantung" />}
                                         {visibleData.power && <Line yAxisId="power" type="monotone" dataKey="watts" stroke="#8884d8" dot={false} name="Power" />}
                                     </AreaChart>
                                 </ResponsiveContainer>

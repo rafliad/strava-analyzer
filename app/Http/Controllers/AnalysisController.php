@@ -34,7 +34,8 @@ class AnalysisController extends Controller
         }
 
         $prompt = $this->buildAnalysisPrompt($activities, $validated['startDate'], $validated['endDate']);
-        $analysis = $this->askGemini($prompt);
+        $analysisRaw = $this->askGemini($prompt);
+        $analysis = $this->postProcessMarkdown($analysisRaw);
 
         return response()->json(['analysis' => $analysis]);
     }
