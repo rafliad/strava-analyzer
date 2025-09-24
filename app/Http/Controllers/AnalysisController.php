@@ -46,7 +46,8 @@ class AnalysisController extends Controller
             abort(403, 'Unauthorized action.');
         }
 
-        $prompt = $this->buildSingleActivityPrompt($activity);
+        $preparedData = $this->prepareSingleActivityDataForAI($activity);
+        $prompt = $this->buildSingleActivityPrompt($activity, $preparedData);
         $analysisRaw = $this->askGemini($prompt);
         $analysis = $this->postProcessMarkdown($analysisRaw);
 
@@ -122,421 +123,120 @@ class AnalysisController extends Controller
     }
 
 
-    private function buildSingleActivityPrompt(Activity $activity): string
+    private function buildSingleActivityPrompt(Activity $activity, array $preparedData): string
     {
-        $activityDetails = sprintf(
-            "Activity Details:\n- Name: %s\n- Date: %s\n- Type: %s\n- Distance: %.2f km\n- Moving Time: %d minutes %d seconds\n- Total Elevation Gain: %d m",
-            $activity->name,
-            $activity->start_date->format('F d, Y'),
-            $activity->type,
-            $activity->distance / 1000,
-            floor($activity->moving_time / 60),
-            $activity->moving_time % 60,
-            $activity->total_elevation_gain
-        );
-
-        $streamSummary = $this->summarizeStreams($activity->streams);
+        $dataString = json_encode($preparedData, JSON_PRETTY_PRINT);
 
         $systemPrompt = <<<PROMPT
         You are a professional running coach.
-        Your task: provide a **post-run analysis for a SINGLE activity**.
+        Your task: provide a **post-run analysis for a SINGLE activity** based on the structured JSON data provided.
 
         CRITICAL RULES (follow exactly):
-        1. Use Markdown only. Do NOT wrap heading markers (#, ##, etc.) with bold or other inline formatting.
-        2. Place each heading on its own line and ensure there is a blank line before and after each heading block (so headings render correctly).
-        3. Follow the exact structure below and return ONLY the filled content (no extra explanation, no numbered lists before the template):
+        1.  Use Markdown for formatting. Ensure a blank line before and after headings.
+        2.  Analyze the provided JSON data, which includes overall stats and a comparison of the first half vs. the second half of the run.
+        3.  Follow the exact structure below:
+
         # Analysis for: {$activity->name}
 
         ## Performance Summary
+        - [Provide a 1-2 sentence overview of the run using the 'overall_summary' data.]
 
-        - [one or two sentences summarizing the session based on the provided details]
+        ## Cardiac Drift Analysis
+        - [**CRITICAL:** Compare 'first_half_metrics' and 'second_half_metrics'.
+        - Calculate the difference in average heart rate (HR) and average pace.
+        - **Explicitly state if cardiac drift is present or not.** Cardiac drift occurs when HR increases significantly while pace stays the same or slows down.
+        - Explain the likely cause (e.g., strong endurance, good pacing, fatigue, dehydration, heat).]
 
-        ## Pace & Heart Rate Analysis
+        ## Power & Elevation
+        - [Comment on the average power output and how elevation might have influenced the run, using the 'overall_summary' data.]
 
-        - [Analyze the relationship between pace and heart rate. Critically, use the provided "Split analysis" and "Cardiac drift note" data below to determine if cardiac drift occurred. Explain what this means for the athlete (e.g., potential fatigue, dehydration, or strong endurance if no drift is present).]
-
-        ## Power & Hill Performance
-
-        - [comments about power stability and how elevation affected you, based on the split data if available]
-
-        ## Conclusion & Tips
-
-        - [one positive conclusion]
-        - [one actionable tip]
+        ## Key Takeaways
+        - [Provide one positive takeaway from the analysis.]
+        - [Provide one actionable tip for the next run.]
 
         END OF TEMPLATE.
         PROMPT;
-        return $systemPrompt . "\n\nHere is the activity data:\n" . $activityDetails . $streamSummary;
+        return $systemPrompt . "\n\nAnalyze the following activity data:\n" . $dataString;
     }
 
-    private function summarizeStreams($streams): string
+    // NOTE: Method-method kompleks sebelumnya digantikan oleh satu method ini.
+    /**
+     * Pre-processes activity streams into a simple, structured array for the AI.
+     * Calculates first-half vs. second-half metrics for cardiac drift analysis.
+     */
+    private function prepareSingleActivityDataForAI(Activity $activity): array
     {
-        $normalized = $this->normalizeStreams($streams);
-        if (empty($normalized)) {
-            return '';
+        $streams = is_string($activity->streams) ? json_decode($activity->streams, true) : $activity->streams;
+
+        if (empty($streams) || !is_array($streams)) {
+            return ['error' => 'No stream data available for detailed analysis.'];
         }
 
-        $distances = array_filter($normalized['distance'], function ($v) {
-            return is_numeric($v) && $v > 0;
-        });
-        $times = array_filter($normalized['time'], function ($v) {
-            return is_numeric($v) && $v > 0;
-        });
+        // --- Calculate Overall Averages ---
+        $validHr = array_filter(array_column($streams, 'heartrate'));
+        $validWatts = array_filter(array_column($streams, 'watts'));
+        $avgHr = !empty($validHr) ? round(array_sum($validHr) / count($validHr)) : null;
+        $avgWatts = !empty($validWatts) ? round(array_sum($validWatts) / count($validWatts)) : null;
 
-        $global = [];
-        if (!empty($distances) && !empty($times)) {
-            $firstIdx = key($distances);
-            $lastIdx = array_key_last($normalized['distance']);
-            $firstIdx = null;
-            $lastIdx = null;
-            for ($i = 0; $i < count($normalized['distance']); $i++) {
-                if (is_numeric($normalized['distance'][$i]) && is_numeric($normalized['time'][$i])) {
-                    if ($firstIdx === null) $firstIdx = $i;
-                    $lastIdx = $i;
-                }
+        // --- Calculate Half-Splits ---
+        $totalPoints = count($streams);
+        $midPointIndex = intval($totalPoints / 2);
+
+        $firstHalfStreams = array_slice($streams, 0, $midPointIndex);
+        $secondHalfStreams = array_slice($streams, $midPointIndex);
+
+        $calculateHalfMetrics = function ($halfStreams) {
+            if (count($halfStreams) < 2) {
+                return ['avg_hr' => null, 'avg_pace_min_km' => null];
             }
-            if ($firstIdx !== null && $lastIdx !== null && $lastIdx > $firstIdx) {
-                $totalDistM = $normalized['distance'][$lastIdx] - $normalized['distance'][$firstIdx];
-                $totalTimeS = $normalized['time'][$lastIdx] - $normalized['time'][$firstIdx];
-                if ($totalDistM > 0 && $totalTimeS > 0) {
-                    $global['pace_sec_per_km'] = $totalTimeS / ($totalDistM / 1000.0);
-                }
+
+            $startPoint = $halfStreams[0];
+            $endPoint = end($halfStreams);
+
+            $deltaDistance = $endPoint['distance'] - $startPoint['distance'];
+            $deltaTime = $endPoint['time'] - $startPoint['time'];
+
+            $halfAvgHr = null;
+            $hrData = array_filter(array_column($halfStreams, 'heartrate'));
+            if (!empty($hrData)) {
+                $halfAvgHr = round(array_sum($hrData) / count($hrData));
             }
-        }
 
-        $hrVals = array_filter($normalized['heartrate'], function ($v) {
-            return is_numeric($v) && $v > 0;
-        });
-        $pwVals = array_filter($normalized['watts'], function ($v) {
-            return is_numeric($v) && $v > 0;
-        });
-        $pacePointVals = array_filter($normalized['pace'], function ($v) {
-            return is_numeric($v) && $v > 0;
-        });
-
-        if (!empty($hrVals)) {
-            $global['hr_avg'] = round(array_sum($hrVals) / count($hrVals));
-            $global['hr_min'] = round(min($hrVals));
-            $global['hr_max'] = round(max($hrVals));
-        }
-        if (!empty($pwVals)) {
-            $global['pw_avg'] = round(array_sum($pwVals) / count($pwVals));
-            $global['pw_max'] = round(max($pwVals));
-        }
-        if (!empty($pacePointVals)) {
-            $global['pace_point_avg'] = round(array_sum($pacePointVals) / count($pacePointVals));
-            $global['pace_point_min'] = round(min($pacePointVals));
-            $global['pace_point_max'] = round(max($pacePointVals));
-        }
-
-        $splits = $this->analyzeSplits($normalized, 1000);
-        $splitSummary = "";
-        if (!empty($splits)) {
-            $splitSummary .= "\n\nSplit analysis (per 1 km):\n";
-            foreach ($splits as $i => $s) {
-                $idx = $i + 1;
-                $paceStr = $this->formatPace($s['pace_sec_per_km']);
-                $hrStr = $s['avgHR'] ? round($s['avgHR']) . " bpm" : "-";
-                $pwStr = $s['avgPower'] ? round($s['avgPower']) . " W" : "-";
-                $splitSummary .= sprintf("Split %d: Pace %s, HR %s, Power %s\n", $idx, $paceStr, $hrStr, $pwStr);
+            $halfAvgPace = null;
+            if ($deltaDistance > 0 && $deltaTime > 0) {
+                // Pace in seconds per km -> minutes per km
+                $paceInSecPerKm = ($deltaTime / $deltaDistance) * 1000;
+                $halfAvgPace = round($paceInSecPerKm / 60, 2);
             }
-            $paces = array_column($splits, 'pace_sec_per_km');
-            $validPaces = array_filter($paces, function ($p) {
-                return is_numeric($p) && $p > 0;
-            });
-            if (!empty($validPaces)) {
-                $fastestIdx = array_search(min($validPaces), $paces);
-                $slowestIdx = array_search(max($validPaces), $paces);
-                $splitSummary .= sprintf(
-                    "\nFastest split: #%d (%s). Slowest split: #%d (%s).\n",
-                    $fastestIdx + 1,
-                    $this->formatPace($paces[$fastestIdx]),
-                    $slowestIdx + 1,
-                    $this->formatPace($paces[$slowestIdx])
-                );
-            }
-        }
 
-        // Cardiac drift detection
-        $driftNote = "";
-        if (!empty($splits) && count($splits) >= 3) {
-            $cnt = count($splits);
-            $third = max(1, (int) floor($cnt / 3));
-            $firstSlice = array_slice($splits, 0, $third);
-            $lastSlice = array_slice($splits, -$third);
-            $firstHRs = array_column($firstSlice, 'avgHR');
-            $lastHRs  = array_column($lastSlice, 'avgHR');
-            $firstAvgHR = !empty($firstHRs) ? (array_sum(array_filter($firstHRs)) / count(array_filter($firstHRs))) : null;
-            $lastAvgHR  = !empty($lastHRs) ? (array_sum(array_filter($lastHRs)) / count(array_filter($lastHRs))) : null;
-            if ($firstAvgHR && $lastAvgHR && ($lastAvgHR - $firstAvgHR) >= 6) {
-                $driftNote = "\nNote: Cardiac drift detected — average HR increased by " . round($lastAvgHR - $firstAvgHR) . " bpm from start to end of the run.\n";
-            }
-        }
+            return ['avg_hr' => $halfAvgHr, 'avg_pace_min_km' => $halfAvgPace];
+        };
 
-        $summary = "\n\nStream Summary:\n";
-        if (isset($global['hr_avg'])) {
-            $summary .= sprintf("- Heart Rate: avg %d bpm (min %d, max %d)\n", $global['hr_avg'], $global['hr_min'], $global['hr_max']);
-        }
-        if (isset($global['pw_avg'])) {
-            $summary .= sprintf("- Power: avg %d W (max %d W)\n", $global['pw_avg'], $global['pw_max']);
-        }
-        if (isset($global['pace_sec_per_km'])) {
-            $summary .= sprintf("- Overall Pace (calc): %s min/km\n", $this->formatPace($global['pace_sec_per_km']));
-        } elseif (isset($global['pace_point_avg'])) {
-            $summary .= sprintf("- Average point-wise pace: %s min/km (approx)\n", $this->formatPace($global['pace_point_avg']));
-        }
+        $firstHalfMetrics = $calculateHalfMetrics($firstHalfStreams);
+        $secondHalfMetrics = $calculateHalfMetrics($secondHalfStreams);
 
-        $summary .= $splitSummary;
-        $summary .= $driftNote;
-
-        return $summary;
-    }
-
-    private function normalizeStreams($streams): array
-    {
-        if (is_null($streams) || $streams === '') {
-            return [];
-        }
-
-        if (is_string($streams)) {
-            $decoded = json_decode($streams, true);
-            if ($decoded !== null) $streams = $decoded;
-        }
-
-        if (is_object($streams)) {
-            $streams = json_decode(json_encode($streams), true);
-        }
-
-        $result = [
-            'distance'  => [], // in meters
-            'time'      => [], // in seconds
-            'heartrate' => [],
-            'watts'     => [],
-            'pace'      => [], // sec per km (calculated)
-            'altitude'  => [],
+        // --- Assemble Final Data Structure ---
+        return [
+            'overall_summary' => [
+                'distance_km' => round($activity->distance / 1000, 2),
+                'moving_time_minutes' => round($activity->moving_time / 60, 2),
+                'avg_hr' => $avgHr,
+                'avg_watts' => $avgWatts,
+                'elevation_gain_m' => $activity->total_elevation_gain,
+            ],
+            'first_half_metrics' => $firstHalfMetrics,
+            'second_half_metrics' => $secondHalfMetrics,
         ];
-
-        // Case A: array of points [{distance:..., time:..., heartrate:...}, ...]
-        if (isset($streams[0]) && is_array($streams[0]) && (isset($streams[0]['distance']) || isset($streams[0]['time']))) {
-            foreach ($streams as $pt) {
-                $result['distance'][]  = isset($pt['distance']) ? $pt['distance'] : null;
-                $result['time'][]      = isset($pt['time']) ? $pt['time'] : null;
-                $result['heartrate'][] = $pt['heartrate'] ?? null;
-                $result['watts'][]     = $pt['watts'] ?? ($pt['power'] ?? null);
-                $result['altitude'][]  = $pt['altitude'] ?? null;
-            }
-        } else {
-            // Case B: associative streams like ['distance' => ['data' => [...]], 'time' => ['data'=>[...] ] ] or direct arrays
-            $extract = function ($maybe) {
-                if ($maybe === null) return [];
-                if (is_array($maybe) && isset($maybe['data'])) return $maybe['data'];
-                if (is_array($maybe) && array_values($maybe) === $maybe) return $maybe;
-                if (isset($maybe[0]) && is_array($maybe[0])) {
-                    $vals = array_column($maybe, 'value');
-                    if (!empty($vals)) return $vals;
-                }
-                return [];
-            };
-
-            $result['distance']  = $extract($streams['distance'] ?? null);
-            $result['time']      = $extract($streams['time'] ?? null);
-            $result['heartrate'] = $extract($streams['heartrate'] ?? $streams['heart_rate'] ?? null);
-            $result['watts']     = $extract($streams['watts'] ?? $streams['power'] ?? null);
-            $result['altitude']  = $extract($streams['altitude'] ?? null);
-        }
-
-        $maxLen = max(
-            count($result['distance']),
-            count($result['time']),
-            count($result['heartrate']),
-            count($result['watts']),
-            count($result['altitude'])
-        );
-        if ($maxLen === 0) return [];
-
-        foreach (['distance', 'time', 'heartrate', 'watts', 'altitude'] as $k) {
-            $result[$k] = array_values($result[$k]);
-            if (count($result[$k]) < $maxLen) {
-                $result[$k] = array_pad($result[$k], $maxLen, null);
-            }
-        }
-
-        $distanceMeters = $result['distance'];
-        $timeSeconds = $result['time'];
-        $pace = [];
-        for ($i = 0; $i < $maxLen; $i++) {
-            if ($i === 0) {
-                $pace[] = null;
-                continue;
-            }
-            $d0 = $distanceMeters[$i - 1];
-            $d1 = $distanceMeters[$i];
-            $t0 = $timeSeconds[$i - 1];
-            $t1 = $timeSeconds[$i];
-
-            if (is_numeric($d0) && is_numeric($d1) && is_numeric($t0) && is_numeric($t1)) {
-                $deltaDist = $d1 - $d0; // meters
-                $deltaTime = $t1 - $t0; // seconds
-                if ($deltaDist > 0 && $deltaTime > 0) {
-                    // seconds per km = deltaTime / (deltaDist / 1000)
-                    $secPerKm = $deltaTime / ($deltaDist / 1000.0);
-                    $pace[] = $secPerKm;
-                } else {
-                    $pace[] = null;
-                }
-            } else {
-                $pace[] = null;
-            }
-        }
-
-        $result['distance'] = $distanceMeters;
-        $result['time']     = $timeSeconds;
-        $result['pace']     = $pace;
-
-        return $result;
-    }
-
-
-    private function analyzeSplits(array $normalized, int $splitDistanceMeters = 1000): array
-    {
-        $distance = $normalized['distance'] ?? [];
-        $time     = $normalized['time'] ?? [];
-        $hr       = $normalized['heartrate'] ?? [];
-        $power    = $normalized['watts'] ?? [];
-        $paceRaw  = $normalized['pace'] ?? [];
-
-        $n = max(count($distance), count($time));
-        if ($n === 0) return [];
-
-        // Make arrays the same length using null filling
-        $maxLen = max(count($distance), count($time), count($hr), count($power), count($paceRaw));
-        $distance = array_pad($distance, $maxLen, null);
-        $time     = array_pad($time, $maxLen, null);
-        $hr       = array_pad($hr, $maxLen, null);
-        $power    = array_pad($power, $maxLen, null);
-        $paceRaw  = array_pad($paceRaw, $maxLen, null);
-
-        $distanceInKm = $distance;
-        $splits = [];
-        $currentStartIdx = 0;
-        $currentStartKm = ($distanceInKm[0] ?? 0.0);
-        $targetKm = ($currentStartKm + ($splitDistanceMeters / 1000.0));
-
-        for ($i = 0; $i < $maxLen; $i++) {
-            $d = $distanceInKm[$i] ?? null;
-            if ($d === null) continue;
-
-            if ($d <= $targetKm) {
-                continue;
-            } else {
-                $endIdx = $i - 1;
-                $startIdx = $currentStartIdx;
-                while ($startIdx <= $endIdx && ($distanceInKm[$startIdx] === null || $time[$startIdx] === null)) {
-                    $startIdx++;
-                }
-                while ($endIdx >= $startIdx && ($distanceInKm[$endIdx] === null || $time[$endIdx] === null)) {
-                    $endIdx--;
-                }
-                if ($startIdx <= $endIdx) {
-                    $distKm = $distanceInKm[$endIdx] - $distanceInKm[$startIdx];
-                    $timeSec = $time[$endIdx] - $time[$startIdx];
-                    $paceSecPerKm = null;
-                    if ($distKm > 0 && $timeSec > 0) {
-                        $paceSecPerKm = $timeSec / $distKm;
-                    }
-
-                    $sliceHR = array_slice($hr, $startIdx, $endIdx - $startIdx + 1);
-                    $slicePW = array_slice($power, $startIdx, $endIdx - $startIdx + 1);
-                    $hrVals = array_filter($sliceHR, function ($v) {
-                        return is_numeric($v) && $v > 0;
-                    });
-                    $pwVals = array_filter($slicePW, function ($v) {
-                        return is_numeric($v) && $v > 0;
-                    });
-
-                    $avgHR = !empty($hrVals) ? array_sum($hrVals) / count($hrVals) : null;
-                    $avgPW = !empty($pwVals) ? array_sum($pwVals) / count($pwVals) : null;
-
-                    $splits[] = [
-                        'distance_km' => $distKm,
-                        'time_sec'    => $timeSec,
-                        'pace_sec_per_km' => $paceSecPerKm,
-                        'avgHR'       => $avgHR,
-                        'avgPower'    => $avgPW,
-                    ];
-                }
-                $currentStartIdx = $i;
-                $currentStartKm = $d;
-                $targetKm = $currentStartKm + ($splitDistanceMeters / 1000.0);
-            }
-        }
-
-        $lastIdx = $maxLen - 1;
-        while ($lastIdx >= $currentStartIdx && ($distanceInKm[$lastIdx] === null || $time[$lastIdx] === null)) {
-            $lastIdx--;
-        }
-        if ($lastIdx > $currentStartIdx) {
-            $startIdx = $currentStartIdx;
-            while ($startIdx <= $lastIdx && ($distanceInKm[$startIdx] === null || $time[$startIdx] === null)) {
-                $startIdx++;
-            }
-            if ($startIdx <= $lastIdx) {
-                $distKm = $distanceInKm[$lastIdx] - $distanceInKm[$startIdx];
-                $timeSec = $time[$lastIdx] - $time[$startIdx];
-                $paceSecPerKm = null;
-                if ($distKm > 0 && $timeSec > 0) {
-                    $paceSecPerKm = $timeSec / $distKm;
-                }
-                $sliceHR = array_slice($hr, $startIdx, $lastIdx - $startIdx + 1);
-                $slicePW = array_slice($power, $startIdx, $lastIdx - $startIdx + 1);
-                $hrVals = array_filter($sliceHR, function ($v) {
-                    return is_numeric($v) && $v > 0;
-                });
-                $pwVals = array_filter($slicePW, function ($v) {
-                    return is_numeric($v) && $v > 0;
-                });
-
-                $avgHR = !empty($hrVals) ? array_sum($hrVals) / count($hrVals) : null;
-                $avgPW = !empty($pwVals) ? array_sum($pwVals) / count($pwVals) : null;
-
-                $splits[] = [
-                    'distance_km' => $distKm,
-                    'time_sec'    => $timeSec,
-                    'pace_sec_per_km' => $paceSecPerKm,
-                    'avgHR'       => $avgHR,
-                    'avgPower'    => $avgPW,
-                ];
-            }
-        }
-
-        return $splits;
-    }
-    private function formatPace(?float $secPerKm): string
-    {
-        if ($secPerKm === null) return '-';
-        $totalSec = (int) round($secPerKm);
-        $min = intdiv($totalSec, 60);
-        $sec = $totalSec % 60;
-        return sprintf('%02d:%02d', $min, $sec);
     }
 
     private function postProcessMarkdown(string $text): string
     {
         if ($text === '') return $text;
-        // 1) Remove bold around headings: **## Heading**  OR **# Heading** OR **### ...**
-        //    Capture patterns like **## Heading**  or ** ## Heading ** and replace with ## Heading
         $text = preg_replace('/\*\*\s*(#{1,6}\s*)(.*?)\s*\*\*/m', '$1$2', $text);
-        // 2) Remove italic/other wrapping that may include leading #, e.g. *__## Heading__*  (best-effort)
         $text = preg_replace('/[_\*]+\s*(#{1,6}\s*)(.*?)\s*[_\*]+/m', '$1$2', $text);
-        // 3) Ensure headings are on their own line: if there is no newline before a heading, add one.
-        //    e.g. "Some text ## Heading" -> "Some text\n\n## Heading"
         $text = preg_replace('/([^\\n])\\s*(\\n?)(#{1,6}\\s)/', "$1\n\n$3", $text);
-        // 4) If a line starts with whitespace then ##, trim leading spaces so markdown parser treats it as heading
         $text = preg_replace('/^[ \\t]+(#{1,6}\\s+)/m', '$1', $text);
-        // 5) Collapse more than 2 consecutive newlines into max 2 (neater)
         $text = preg_replace("/\\n{3,}/", "\n\n", $text);
-        // Trim edges
-        $text = trim($text) . "\n";
-        return $text;
+        return trim($text) . "\n";
     }
 }

@@ -28,7 +28,7 @@ const ToggleSwitch = ({ label, isEnabled, onToggle }) => (
 );
 
 
-export default function Show({ auth, activity }) {
+export default function Show({ auth, activity, splits }) { // NOTE: Menerima props 'splits'
     const [visibleData, setVisibleData] = useState({
         pace: true,
         heartrate: false,
@@ -52,7 +52,7 @@ export default function Show({ auth, activity }) {
         try {
             const response = await axios.post(route('analysis.performSingle', { activity: activity.id }));
             setSingleAnalysisResult(response.data.analysis);
-            toast.dismiss(); // Hapus toast loading
+            toast.dismiss();
             toast.success('Analysis complete!');
         } catch (error) {
             console.error('Error performing single analysis:', error);
@@ -78,6 +78,16 @@ export default function Show({ auth, activity }) {
         const seconds = Math.round((decimalMinutes - minutes) * 60);
         return `${minutes}:${seconds.toString().padStart(2, '0')}`;
     };
+
+    // NOTE: Fungsi baru untuk format pace dari detik
+    const formatPaceFromSeconds = (seconds) => {
+        if (seconds === null || isNaN(seconds) || seconds <= 0) return 'N/A';
+        const totalSeconds = Math.round(seconds);
+        const minutes = Math.floor(totalSeconds / 60);
+        const remainingSeconds = totalSeconds % 60;
+        return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+    };
+
 
     const stats = [
         { name: 'Jarak', value: `${(activity.distance / 1000).toFixed(2)} km` },
@@ -178,8 +188,39 @@ export default function Show({ auth, activity }) {
                             </dl>
                         </div>
                     </div>
+                    
+                    {/* NOTE: Tabel Split ditambahkan di sini */}
+                    {splits && splits.length > 0 && (
+                        <div className="bg-white overflow-hidden shadow-sm sm:rounded-lg">
+                            <div className="p-6">
+                                <h3 className="text-lg font-semibold mb-4 text-gray-900">Splits (per 1 km)</h3>
+                                <div className="overflow-x-auto">
+                                    <table className="min-w-full divide-y divide-gray-200">
+                                        <thead className="bg-gray-50">
+                                            <tr>
+                                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Km</th>
+                                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pace</th>
+                                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Avg HR</th>
+                                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Avg Power</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="bg-white divide-y divide-gray-200">
+                                            {splits.map((split) => (
+                                                <tr key={split.split}>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{split.split}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatPaceFromSeconds(split.pace_sec_per_km)}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{split.avg_hr ? `${Math.round(split.avg_hr)} bpm` : '-'}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{split.avg_watts ? `${Math.round(split.avg_watts)} W` : '-'}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
-                    {/* NOTE: Bagian baru untuk tombol dan hasil analisis */}
+
                     <div className="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6">
                         <div className="flex justify-center">
                              <button
