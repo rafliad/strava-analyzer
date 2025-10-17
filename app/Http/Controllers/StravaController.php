@@ -91,6 +91,10 @@ class StravaController extends Controller
                 );
             }
         }
+
+        $cacheKey = "user:{$user->id}:prs";
+        Cache::forget($cacheKey);
+
         return redirect()->route('activities.index')->with('success', 'Activities have been synced!');
     }
 

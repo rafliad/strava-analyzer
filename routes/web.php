@@ -9,6 +9,12 @@ use App\Http\Controllers\ActivityController;
 use App\Http\Controllers\AnalysisController;
 use App\Http\Controllers\DashboardController;
 
+use App\Http\Controllers\PersonalRecordsController;
+
+Route::get('/personal-records', [PersonalRecordsController::class, 'index'])
+    ->middleware(['auth', 'verified'])
+    ->name('personal-records');
+
 Route::get('/', function () {
     return Inertia::render('Welcome', [
         'canLogin' => Route::has('login'),

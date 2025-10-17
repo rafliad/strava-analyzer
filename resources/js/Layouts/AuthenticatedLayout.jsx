@@ -4,13 +4,16 @@ import NavLink from "@/Components/NavLink";
 import ResponsiveNavLink from "@/Components/ResponsiveNavLink";
 import { Link, usePage } from "@inertiajs/react";
 import { useState, useEffect } from "react";
-import toast, { Toaster } from 'react-hot-toast';
-
+import toast, { Toaster } from "react-hot-toast";
 
 export default function AuthenticatedLayout({ header, children }) {
-    const { auth: { user }, flash } = usePage().props;
+    const {
+        auth: { user },
+        flash,
+    } = usePage().props;
 
-    const [showingNavigationDropdown, setShowingNavigationDropdown] = useState(false);
+    const [showingNavigationDropdown, setShowingNavigationDropdown] =
+        useState(false);
 
     useEffect(() => {
         if (flash.status) {
@@ -59,6 +62,14 @@ export default function AuthenticatedLayout({ header, children }) {
                                     active={route().current("analysis.index")}
                                 >
                                     Analysis
+                                </NavLink>
+                            </div>
+                            <div className="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex">
+                                <NavLink
+                                    href={route("personal-records")}
+                                    active={route().current("personal-records")}
+                                >
+                                    Personal Records
                                 </NavLink>
                             </div>
                         </div>
@@ -112,7 +123,7 @@ export default function AuthenticatedLayout({ header, children }) {
                             <button
                                 onClick={() =>
                                     setShowingNavigationDropdown(
-                                        (previousState) => !previousState
+                                        (previousState) => !previousState,
                                     )
                                 }
                                 className="inline-flex items-center justify-center rounded-md p-2 text-gray-400 transition duration-150 ease-in-out hover:bg-gray-100 hover:text-gray-500 focus:bg-gray-100 focus:text-gray-500 focus:outline-none"
@@ -175,6 +186,12 @@ export default function AuthenticatedLayout({ header, children }) {
                             active={route().current("analysis.index")}
                         >
                             Analysis
+                        </ResponsiveNavLink>
+                        <ResponsiveNavLink
+                            href={route("personal-records")}
+                            active={route().current("personal-records")}
+                        >
+                            Personal Records
                         </ResponsiveNavLink>
                     </div>
 
