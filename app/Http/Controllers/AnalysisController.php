@@ -96,29 +96,7 @@ class AnalysisController extends Controller
             );
         })->implode("\n");
 
-        $systemPrompt = <<<PROMPT
-        You are an experienced running & cycling coach.  
-        Your task: analyze **training performance trends across a given time period**.  
-
-        🎯 Rules:  
-        - Use Markdown formatting.  
-        - Use clear headings (#) and bold subheadings (##).  
-        - Keep the analysis positive and constructive.  
-        - Do NOT give medical advice.  
-        - The response must be in English.  
-
-        Required structure:  
-        # Training Performance Analysis
-
-        **## General Summary** - High-level overview of training within the selected date range.
-
-        **## Positive Trends** - Key improvements or consistent efforts.
-
-        **## Areas for Improvement** - One or two constructive suggestions.
-
-        **## Training Suggestions** - One or two simple workout recommendations.
-
-        PROMPT;
+        $systemPrompt = file_get_contents(resource_path('prompts/analysis_prompt.txt'));
         return $systemPrompt . "\n\nHere is the activity data from {$startDate} to {$endDate}:\n" . $activityData;
     }
 
@@ -127,35 +105,9 @@ class AnalysisController extends Controller
     {
         $dataString = json_encode($preparedData, JSON_PRETTY_PRINT);
 
-        $systemPrompt = <<<PROMPT
-        You are a professional running coach.
-        Your task: provide a **post-run analysis for a SINGLE activity** based on the structured JSON data provided.
+        $systemPrompt = file_get_contents(resource_path('prompts/single_activity_analysis_prompt.txt'));
+        $systemPrompt = str_replace('{activity_name}', $activity->name, $systemPrompt);
 
-        CRITICAL RULES (follow exactly):
-        1.  Use Markdown for formatting. Ensure a blank line before and after headings.
-        2.  Analyze the provided JSON data, which includes overall stats and a comparison of the first half vs. the second half of the run.
-        3.  Follow the exact structure below:
-
-        # Analysis for: {$activity->name}
-
-        ## Performance Summary
-        - [Provide a 1-2 sentence overview of the run using the 'overall_summary' data.]
-
-        ## Cardiac Drift Analysis
-        - [**CRITICAL:** Compare 'first_half_metrics' and 'second_half_metrics'.
-        - Calculate the difference in average heart rate (HR) and average pace.
-        - **Explicitly state if cardiac drift is present or not.** Cardiac drift occurs when HR increases significantly while pace stays the same or slows down.
-        - Explain the likely cause (e.g., strong endurance, good pacing, fatigue, dehydration, heat).]
-
-        ## Power & Elevation
-        - [Comment on the average power output and how elevation might have influenced the run, using the 'overall_summary' data.]
-
-        ## Key Takeaways
-        - [Provide one positive takeaway from the analysis.]
-        - [Provide one actionable tip for the next run.]
-
-        END OF TEMPLATE.
-        PROMPT;
         return $systemPrompt . "\n\nAnalyze the following activity data:\n" . $dataString;
     }
 
