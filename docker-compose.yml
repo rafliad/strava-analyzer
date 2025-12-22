@@ -33,7 +33,7 @@ services:
         container_name: laravel-db
         restart: unless-stopped
         ports:
-            - 5432:5432
+            - "5432:5432"
         environment:
             POSTGRES_DB: ${DB_DATABASE}
             POSTGRES_USER: ${DB_USERNAME}
